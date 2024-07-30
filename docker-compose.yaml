@@ -1,0 +1,68 @@
+name: lab4
+services:
+  nginx:
+    # build: ./nginx
+    image: "nginx:1.25"
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "8000:8000"
+    volumes:
+      - ./conf:/etc/nginx/conf.d
+      - ./html:/usr/share/nginx/html
+    depends_on:
+      - flask
+
+  flask:
+    build: .
+    container_name: flask
+    env_file:
+      - .env
+    ports:
+      - "5000:5000"
+      - "8080:80"
+    command: flask --app flask_app run --host=0.0.0.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: "postgres:16.1-alpine"
+    container_name: postgres
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d flask_db -U flask_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  prometheus:
+    image: prom/prometheus:v2.53.1
+    container_name: prometheus
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    depends_on:
+      - nginx_exporter
+
+  nginx_exporter:
+    image: nginx/nginx-prometheus-exporter:1.1.0
+    container_name: exporter
+    ports:
+      - 9113:9113
+    command:
+      - -nginx.scrape-uri=http://nginx:8000/metrics
+    depends_on:
+      - nginx
+    
+
+volumes:
+  postgres_data:
+  prometheus_data:
